@@ -4,7 +4,9 @@ import { readResponseWithLimit } from "./read-response-with-limit.js";
 function makeStream(chunks: Uint8Array[]) {
   return new ReadableStream<Uint8Array>({
     start(controller) {
-      for (const chunk of chunks) controller.enqueue(chunk);
+      for (const chunk of chunks) {
+        controller.enqueue(chunk);
+      }
       controller.close();
     },
   });

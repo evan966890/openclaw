@@ -10,6 +10,14 @@ export async function readResponseWithLimit(
     ((params: { size: number; maxBytes: number }) =>
       new Error(`Content too large: ${params.size} bytes (limit: ${params.maxBytes} bytes)`));
 
+  const contentLengthHeader = res.headers.get("content-length");
+  if (contentLengthHeader) {
+    const contentLength = Number(contentLengthHeader);
+    if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+      throw onOverflow({ size: contentLength, maxBytes, res });
+    }
+  }
+
   const body = res.body;
   if (!body || typeof body.getReader !== "function") {
     const fallback = Buffer.from(await res.arrayBuffer());

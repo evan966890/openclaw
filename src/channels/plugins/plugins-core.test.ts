@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, expectTypeOf, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import type { OpenClawConfig } from "../../config/config.js";
 import type { DiscordProbe } from "../../discord/probe.js";
 import type { DiscordTokenResolution } from "../../discord/token.js";
@@ -143,6 +143,31 @@ describe("channel plugin catalog", () => {
       (entry) => entry.id,
     );
     expect(ids).toContain("demo-channel");
+  });
+
+  it("warns when external catalog JSON is invalid and warning env is enabled", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-catalog-invalid-"));
+    const catalogPath = path.join(dir, "catalog.json");
+    fs.writeFileSync(catalogPath, "{bad json", "utf-8");
+
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const previous = process.env.OPENCLAW_PLUGIN_CATALOG_WARN_INVALID;
+    process.env.OPENCLAW_PLUGIN_CATALOG_WARN_INVALID = "1";
+    try {
+      const ids = listChannelPluginCatalogEntries({ catalogPaths: [catalogPath] }).map(
+        (entry) => entry.id,
+      );
+      expect(ids).toContain("msteams");
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("ignored invalid catalog file"));
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining(catalogPath));
+    } finally {
+      if (previous === undefined) {
+        delete process.env.OPENCLAW_PLUGIN_CATALOG_WARN_INVALID;
+      } else {
+        process.env.OPENCLAW_PLUGIN_CATALOG_WARN_INVALID = previous;
+      }
+      warnSpy.mockRestore();
+    }
   });
 });
 

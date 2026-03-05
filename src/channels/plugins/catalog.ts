@@ -58,6 +58,7 @@ const DEFAULT_CATALOG_PATHS = [
 ];
 
 const ENV_CATALOG_PATHS = ["OPENCLAW_PLUGIN_CATALOG_PATHS", "OPENCLAW_MPM_CATALOG_PATHS"];
+const WARN_INVALID_CATALOG_ENV = "OPENCLAW_PLUGIN_CATALOG_WARN_INVALID";
 
 type ManifestKey = typeof MANIFEST_KEY;
 
@@ -100,9 +101,25 @@ function resolveExternalCatalogPaths(options: CatalogOptions): string[] {
   return DEFAULT_CATALOG_PATHS;
 }
 
+function shouldWarnOnInvalidCatalogFile(env: NodeJS.ProcessEnv): boolean {
+  const raw = env[WARN_INVALID_CATALOG_ENV]?.trim().toLowerCase();
+  if (!raw) {
+    return false;
+  }
+  return raw !== "0" && raw !== "false" && raw !== "off";
+}
+
+function formatCatalogLoadError(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
+  }
+  return String(error);
+}
+
 function loadExternalCatalogEntries(options: CatalogOptions): ExternalCatalogEntry[] {
   const paths = resolveExternalCatalogPaths(options);
   const entries: ExternalCatalogEntry[] = [];
+  const warnOnInvalidCatalog = shouldWarnOnInvalidCatalogFile(process.env);
   for (const rawPath of paths) {
     const resolved = resolveUserPath(rawPath);
     if (!fs.existsSync(resolved)) {
@@ -111,8 +128,13 @@ function loadExternalCatalogEntries(options: CatalogOptions): ExternalCatalogEnt
     try {
       const payload = JSON.parse(fs.readFileSync(resolved, "utf-8")) as unknown;
       entries.push(...parseCatalogEntries(payload));
-    } catch {
+    } catch (err) {
       // Ignore invalid catalog files.
+      if (warnOnInvalidCatalog) {
+        console.warn(
+          `[plugins/catalog] ignored invalid catalog file: ${resolved} (${formatCatalogLoadError(err)})`,
+        );
+      }
     }
   }
   return entries;

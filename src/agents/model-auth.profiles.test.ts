@@ -333,4 +333,57 @@ describe("getApiKeyForModel", () => {
       },
     );
   });
+
+  it("reports the first profile resolution error when profile refresh throws", async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-auth-error-"));
+    const agentDir = path.join(tempDir, "agent");
+    await fs.mkdir(agentDir, { recursive: true, mode: 0o700 });
+
+    const expired = Date.now() - 60_000;
+    const store = {
+      version: 1,
+      profiles: {
+        "chutes:default": {
+          type: "oauth",
+          provider: "chutes",
+          access: "expired-access",
+          expires: expired,
+        },
+      },
+    } as never;
+    await fs.writeFile(
+      path.join(agentDir, "auth-profiles.json"),
+      `${JSON.stringify(store)}\n`,
+      "utf8",
+    );
+
+    try {
+      await withEnvAsync(
+        {
+          CHUTES_OAUTH_TOKEN: undefined,
+          CHUTES_API_KEY: undefined,
+          CHUTES_CLIENT_ID: undefined,
+        },
+        async () => {
+          let error: unknown = null;
+          try {
+            await resolveApiKeyForProvider({
+              provider: "chutes",
+              store,
+              agentDir,
+            });
+          } catch (err) {
+            error = err;
+          }
+
+          const message = String(error);
+          expect(message).toContain('No API key found for provider "chutes".');
+          expect(message).toContain("Last auth profile error (chutes:default)");
+          expect(message).toContain("missing refresh token");
+        },
+      );
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
 });

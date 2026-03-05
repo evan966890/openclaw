@@ -77,6 +77,11 @@ function resolveEnvSourceLabel(params: {
   return `${prefix}${params.label}`;
 }
 
+function summarizeProfileResolutionError(error: unknown): string {
+  const text = error instanceof Error ? error.message : String(error);
+  return text.replace(/\s+/g, " ").trim();
+}
+
 export function resolveAwsSdkEnvVarName(env: NodeJS.ProcessEnv = process.env): string | undefined {
   if (env[AWS_BEARER_ENV]?.trim()) {
     return AWS_BEARER_ENV;
@@ -173,6 +178,7 @@ export async function resolveApiKeyForProvider(params: {
     provider,
     preferredProfile,
   });
+  let profileResolutionError: { profileId: string; message: string } | null = null;
   for (const candidate of order) {
     try {
       const resolved = await resolveApiKeyForProfile({
@@ -190,7 +196,14 @@ export async function resolveApiKeyForProvider(params: {
           mode: mode === "oauth" ? "oauth" : mode === "token" ? "token" : "api-key",
         };
       }
-    } catch {}
+    } catch (error) {
+      if (!profileResolutionError) {
+        profileResolutionError = {
+          profileId: candidate,
+          message: summarizeProfileResolutionError(error),
+        };
+      }
+    }
   }
 
   const envResolved = resolveEnvApiKey(provider);
@@ -223,12 +236,15 @@ export async function resolveApiKeyForProvider(params: {
 
   const authStorePath = resolveAuthStorePathForDisplay(params.agentDir);
   const resolvedAgentDir = path.dirname(authStorePath);
+  const profileErrorHint = profileResolutionError
+    ? ` Last auth profile error (${profileResolutionError.profileId}): ${profileResolutionError.message}`
+    : "";
   throw new Error(
     [
       `No API key found for provider "${provider}".`,
       `Auth store: ${authStorePath} (agentDir: ${resolvedAgentDir}).`,
       `Configure auth for this agent (${formatCliCommand("openclaw agents add <id>")}) or copy auth-profiles.json from the main agentDir.`,
-    ].join(" "),
+    ].join(" ") + profileErrorHint,
   );
 }
 

@@ -95,15 +95,18 @@ const CHANNEL_AGNOSTIC_SESSION_SCOPES = new Set([
 ]);
 const CHANNEL_SCOPED_SESSION_SHAPES = new Set(["direct", "dm", "group", "channel"]);
 
+const CHAT_DISALLOWED_CONTROL_CHAR_PATTERN = "[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]";
+const CHAT_DISALLOWED_CONTROL_CHAR_DETECT_RE = new RegExp(CHAT_DISALLOWED_CONTROL_CHAR_PATTERN);
+const CHAT_DISALLOWED_CONTROL_CHAR_REPLACE_RE = new RegExp(
+  CHAT_DISALLOWED_CONTROL_CHAR_PATTERN,
+  "g",
+);
+
 function stripDisallowedChatControlChars(message: string): string {
-  let output = "";
-  for (const char of message) {
-    const code = char.charCodeAt(0);
-    if (code === 9 || code === 10 || code === 13 || (code >= 32 && code !== 127)) {
-      output += char;
-    }
+  if (!CHAT_DISALLOWED_CONTROL_CHAR_DETECT_RE.test(message)) {
+    return message;
   }
-  return output;
+  return message.replace(CHAT_DISALLOWED_CONTROL_CHAR_REPLACE_RE, "");
 }
 
 export function sanitizeChatSendMessageInput(

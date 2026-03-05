@@ -267,6 +267,11 @@ describe("sanitizeChatSendMessageInput", () => {
     });
   });
 
+  it("keeps already-safe messages unchanged", () => {
+    const message = "safe text\twith whitespace\nemoji 😀";
+    expect(sanitizeChatSendMessageInput(message)).toEqual({ ok: true, message });
+  });
+
   it("strips unsafe control characters while preserving tab/newline/carriage return", () => {
     const result = sanitizeChatSendMessageInput("a\u0001b\tc\nd\re\u0007f\u007f");
     expect(result).toEqual({ ok: true, message: "ab\tc\nd\ref" });

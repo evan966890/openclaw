@@ -59,6 +59,8 @@ const DEFAULT_CATALOG_PATHS = [
 
 const ENV_CATALOG_PATHS = ["OPENCLAW_PLUGIN_CATALOG_PATHS", "OPENCLAW_MPM_CATALOG_PATHS"];
 
+const warnedInvalidCatalogPaths = new Set<string>();
+
 type ManifestKey = typeof MANIFEST_KEY;
 
 function parseCatalogEntries(raw: unknown): ExternalCatalogEntry[] {
@@ -100,6 +102,15 @@ function resolveExternalCatalogPaths(options: CatalogOptions): string[] {
   return DEFAULT_CATALOG_PATHS;
 }
 
+function warnInvalidCatalogFile(catalogPath: string, err: unknown): void {
+  if (warnedInvalidCatalogPaths.has(catalogPath)) {
+    return;
+  }
+  warnedInvalidCatalogPaths.add(catalogPath);
+  const detail = err instanceof Error ? err.message : String(err);
+  console.warn(`Ignoring invalid plugin catalog file at ${catalogPath}: ${detail}`);
+}
+
 function loadExternalCatalogEntries(options: CatalogOptions): ExternalCatalogEntry[] {
   const paths = resolveExternalCatalogPaths(options);
   const entries: ExternalCatalogEntry[] = [];
@@ -111,8 +122,8 @@ function loadExternalCatalogEntries(options: CatalogOptions): ExternalCatalogEnt
     try {
       const payload = JSON.parse(fs.readFileSync(resolved, "utf-8")) as unknown;
       entries.push(...parseCatalogEntries(payload));
-    } catch {
-      // Ignore invalid catalog files.
+    } catch (err) {
+      warnInvalidCatalogFile(resolved, err);
     }
   }
   return entries;

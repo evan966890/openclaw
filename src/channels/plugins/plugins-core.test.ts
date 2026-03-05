@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, expectTypeOf, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import type { OpenClawConfig } from "../../config/config.js";
 import type { DiscordProbe } from "../../discord/probe.js";
 import type { DiscordTokenResolution } from "../../discord/token.js";
@@ -143,6 +143,126 @@ describe("channel plugin catalog", () => {
       (entry) => entry.id,
     );
     expect(ids).toContain("demo-channel");
+  });
+
+  it("reuses cached external catalog payload when the file is unchanged", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-catalog-cache-"));
+    const catalogPath = path.join(dir, "catalog.json");
+    fs.writeFileSync(
+      catalogPath,
+      JSON.stringify({
+        entries: [
+          {
+            name: "@openclaw/demo-cache",
+            openclaw: {
+              channel: {
+                id: "demo-cache",
+                label: "Demo Cache",
+                selectionLabel: "Demo Cache",
+                docsPath: "/channels/demo-cache",
+                blurb: "Demo cache entry",
+                order: 999,
+              },
+              install: {
+                npmSpec: "@openclaw/demo-cache",
+              },
+            },
+          },
+        ],
+      }),
+    );
+
+    const originalReadFileSync = fs.readFileSync.bind(fs);
+    let throwOnCatalogRead = false;
+    const readSpy = vi.spyOn(fs, "readFileSync").mockImplementation(((
+      ...args: Parameters<typeof originalReadFileSync>
+    ) => {
+      const [target] = args;
+      if (
+        throwOnCatalogRead &&
+        typeof target === "string" &&
+        path.resolve(target) === path.resolve(catalogPath)
+      ) {
+        throw new Error("catalog file should have been served from cache");
+      }
+      return originalReadFileSync(...args);
+    }) as typeof fs.readFileSync);
+
+    const first = listChannelPluginCatalogEntries({ catalogPaths: [catalogPath] }).map(
+      (entry) => entry.id,
+    );
+    expect(first).toContain("demo-cache");
+
+    throwOnCatalogRead = true;
+    const second = listChannelPluginCatalogEntries({ catalogPaths: [catalogPath] }).map(
+      (entry) => entry.id,
+    );
+    expect(second).toContain("demo-cache");
+
+    readSpy.mockRestore();
+  });
+
+  it("refreshes external catalog cache when file content changes", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-catalog-refresh-"));
+    const catalogPath = path.join(dir, "catalog.json");
+    fs.writeFileSync(
+      catalogPath,
+      JSON.stringify({
+        entries: [
+          {
+            name: "@openclaw/demo-old",
+            openclaw: {
+              channel: {
+                id: "demo-old",
+                label: "Demo Old",
+                selectionLabel: "Demo Old",
+                docsPath: "/channels/demo-old",
+                blurb: "Demo old entry",
+                order: 999,
+              },
+              install: {
+                npmSpec: "@openclaw/demo-old",
+              },
+            },
+          },
+        ],
+      }),
+    );
+
+    const first = listChannelPluginCatalogEntries({ catalogPaths: [catalogPath] }).map(
+      (entry) => entry.id,
+    );
+    expect(first).toContain("demo-old");
+
+    fs.writeFileSync(
+      catalogPath,
+      JSON.stringify({
+        entries: [
+          {
+            name: "@openclaw/demo-new-entry",
+            openclaw: {
+              channel: {
+                id: "demo-new-entry",
+                label: "Demo New Entry",
+                selectionLabel: "Demo New Entry",
+                docsPath: "/channels/demo-new-entry",
+                blurb: "Demo new entry",
+                order: 999,
+              },
+              install: {
+                npmSpec: "@openclaw/demo-new-entry",
+              },
+            },
+          },
+        ],
+      }),
+    );
+
+    const second = listChannelPluginCatalogEntries({ catalogPaths: [catalogPath] }).map(
+      (entry) => entry.id,
+    );
+    expect(second).toContain("demo-new-entry");
+    expect(second).not.toContain("demo-old");
   });
 });
 

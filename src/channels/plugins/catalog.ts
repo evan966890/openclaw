@@ -61,6 +61,14 @@ const ENV_CATALOG_PATHS = ["OPENCLAW_PLUGIN_CATALOG_PATHS", "OPENCLAW_MPM_CATALO
 
 type ManifestKey = typeof MANIFEST_KEY;
 
+type ExternalCatalogCacheEntry = {
+  mtimeMs: number;
+  size: number;
+  entries: ExternalCatalogEntry[];
+};
+
+const externalCatalogCache = new Map<string, ExternalCatalogCacheEntry>();
+
 function parseCatalogEntries(raw: unknown): ExternalCatalogEntry[] {
   if (Array.isArray(raw)) {
     return raw.filter((entry): entry is ExternalCatalogEntry => isRecord(entry));
@@ -105,13 +113,38 @@ function loadExternalCatalogEntries(options: CatalogOptions): ExternalCatalogEnt
   const entries: ExternalCatalogEntry[] = [];
   for (const rawPath of paths) {
     const resolved = resolveUserPath(rawPath);
-    if (!fs.existsSync(resolved)) {
+
+    let stat: fs.Stats;
+    try {
+      stat = fs.statSync(resolved);
+    } catch {
       continue;
     }
+    if (!stat.isFile()) {
+      continue;
+    }
+
+    const cached = externalCatalogCache.get(resolved);
+    if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+      entries.push(...cached.entries);
+      continue;
+    }
+
     try {
       const payload = JSON.parse(fs.readFileSync(resolved, "utf-8")) as unknown;
-      entries.push(...parseCatalogEntries(payload));
+      const parsed = parseCatalogEntries(payload);
+      externalCatalogCache.set(resolved, {
+        mtimeMs: stat.mtimeMs,
+        size: stat.size,
+        entries: parsed,
+      });
+      entries.push(...parsed);
     } catch {
+      externalCatalogCache.set(resolved, {
+        mtimeMs: stat.mtimeMs,
+        size: stat.size,
+        entries: [],
+      });
       // Ignore invalid catalog files.
     }
   }

@@ -353,6 +353,17 @@ function setMergedSchemaCache(key: string, value: ConfigSchemaResponse): void {
   mergedSchemaCache.set(key, value);
 }
 
+function getMergedSchemaCache(key: string): ConfigSchemaResponse | undefined {
+  const cached = mergedSchemaCache.get(key);
+  if (!cached) {
+    return undefined;
+  }
+  // Refresh hit order so frequently requested entries are evicted last.
+  mergedSchemaCache.delete(key);
+  mergedSchemaCache.set(key, cached);
+  return cached;
+}
+
 function stripChannelSchema(schema: ConfigSchema): ConfigSchema {
   const next = cloneSchema(schema);
   const root = asSchemaObject(next);
@@ -405,7 +416,7 @@ export function buildConfigSchema(params?: {
     return base;
   }
   const cacheKey = buildMergedSchemaCacheKey({ plugins, channels });
-  const cached = mergedSchemaCache.get(cacheKey);
+  const cached = getMergedSchemaCache(cacheKey);
   if (cached) {
     return cached;
   }
@@ -429,4 +440,9 @@ export function buildConfigSchema(params?: {
   };
   setMergedSchemaCache(cacheKey, merged);
   return merged;
+}
+
+export function resetConfigSchemaCacheForTest(): void {
+  cachedBase = null;
+  mergedSchemaCache.clear();
 }

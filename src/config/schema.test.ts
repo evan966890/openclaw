@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { buildConfigSchema } from "./schema.js";
+import { buildConfigSchema, resetConfigSchemaCacheForTest } from "./schema.js";
 import { applyDerivedTags, CONFIG_TAGS, deriveTagsForPath } from "./schema.tags.js";
 
 describe("config schema", () => {
@@ -160,6 +160,39 @@ describe("config schema", () => {
       channels: [{ ...cachedMergeInput.channels![0] }],
     });
     expect(second).toBe(first);
+  });
+
+  it("keeps recently-read merged schema entries when pruning cache", () => {
+    resetConfigSchemaCacheForTest();
+
+    const makePluginSchemaInput = (id: string): SchemaInput => ({
+      plugins: [
+        {
+          id,
+          configSchema: {
+            type: "object",
+            properties: {
+              [`value_${id.replace(/[^a-z0-9]/gi, "_")}`]: { type: "string" },
+            },
+          },
+        },
+      ],
+    });
+
+    const hotInput = makePluginSchemaInput("cache-hot");
+    const warmInput = makePluginSchemaInput("cache-warm");
+
+    const hotEntry = buildConfigSchema(hotInput);
+    buildConfigSchema(warmInput);
+    expect(buildConfigSchema({ plugins: [{ ...hotInput.plugins![0] }] })).toBe(hotEntry);
+
+    // With a max size of 64 and two seeded entries, the 63rd insert triggers one eviction.
+    for (let i = 0; i < 63; i += 1) {
+      buildConfigSchema(makePluginSchemaInput(`cache-filler-${i}`));
+    }
+
+    const hotEntryAfterPrune = buildConfigSchema({ plugins: [{ ...hotInput.plugins![0] }] });
+    expect(hotEntryAfterPrune).toBe(hotEntry);
   });
 
   it("derives security/auth tags for credential paths", () => {

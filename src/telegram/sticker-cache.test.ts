@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  __setStickerCacheMaxEntriesForTest,
   cacheSticker,
   getAllCachedStickers,
   getCachedSticker,
@@ -34,6 +35,7 @@ describe("sticker-cache", () => {
     if (fs.existsSync(TEST_CACHE_FILE)) {
       fs.unlinkSync(TEST_CACHE_FILE);
     }
+    __setStickerCacheMaxEntriesForTest();
   });
 
   describe("getCachedSticker", () => {
@@ -112,6 +114,37 @@ describe("sticker-cache", () => {
       const result = getCachedSticker("unique789");
       expect(result?.description).toBe("Updated description");
       expect(result?.fileId).toBe("file789-new");
+    });
+  });
+
+  describe("cache bounds", () => {
+    it("prunes oldest entries when cache exceeds max size", () => {
+      __setStickerCacheMaxEntriesForTest(2);
+
+      cacheSticker({
+        fileId: "old",
+        fileUniqueId: "old-unique",
+        description: "Old sticker",
+        cachedAt: "2026-01-20T10:00:00.000Z",
+      });
+      cacheSticker({
+        fileId: "mid",
+        fileUniqueId: "mid-unique",
+        description: "Middle sticker",
+        cachedAt: "2026-01-21T10:00:00.000Z",
+      });
+      cacheSticker({
+        fileId: "new",
+        fileUniqueId: "new-unique",
+        description: "Newest sticker",
+        cachedAt: "2026-01-22T10:00:00.000Z",
+      });
+
+      const all = getAllCachedStickers();
+      expect(all).toHaveLength(2);
+      expect(getCachedSticker("old-unique")).toBeNull();
+      expect(getCachedSticker("mid-unique")).not.toBeNull();
+      expect(getCachedSticker("new-unique")).not.toBeNull();
     });
   });
 

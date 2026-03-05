@@ -16,6 +16,8 @@ import { resolveAutoImageModel } from "../media-understanding/runner.js";
 
 const CACHE_FILE = path.join(STATE_DIR, "telegram", "sticker-cache.json");
 const CACHE_VERSION = 1;
+const DEFAULT_STICKER_CACHE_MAX_ENTRIES = 2000;
+let stickerCacheMaxEntries = DEFAULT_STICKER_CACHE_MAX_ENTRIES;
 
 export interface CachedSticker {
   fileId: string;
@@ -30,6 +32,33 @@ export interface CachedSticker {
 interface StickerCache {
   version: number;
   stickers: Record<string, CachedSticker>;
+}
+
+function toCacheTimestampMs(value: string | undefined): number {
+  if (!value) {
+    return 0;
+  }
+  const ts = Date.parse(value);
+  return Number.isFinite(ts) ? ts : 0;
+}
+
+function pruneStickerCache(stickers: Record<string, CachedSticker>): void {
+  const entries = Object.entries(stickers);
+  if (entries.length <= stickerCacheMaxEntries) {
+    return;
+  }
+
+  entries.sort(
+    ([, left], [, right]) => toCacheTimestampMs(left.cachedAt) - toCacheTimestampMs(right.cachedAt),
+  );
+  const overflow = entries.length - stickerCacheMaxEntries;
+  for (let i = 0; i < overflow; i++) {
+    const key = entries[i]?.[0];
+    if (!key) {
+      continue;
+    }
+    delete stickers[key];
+  }
 }
 
 function loadCache(): StickerCache {
@@ -63,7 +92,16 @@ export function getCachedSticker(fileUniqueId: string): CachedSticker | null {
 export function cacheSticker(sticker: CachedSticker): void {
   const cache = loadCache();
   cache.stickers[sticker.fileUniqueId] = sticker;
+  pruneStickerCache(cache.stickers);
   saveCache(cache);
+}
+
+export function __setStickerCacheMaxEntriesForTest(max?: number): void {
+  if (typeof max === "number" && Number.isFinite(max) && max >= 1) {
+    stickerCacheMaxEntries = Math.floor(max);
+    return;
+  }
+  stickerCacheMaxEntries = DEFAULT_STICKER_CACHE_MAX_ENTRIES;
 }
 
 /**

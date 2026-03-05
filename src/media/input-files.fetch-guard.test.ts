@@ -64,6 +64,36 @@ describe("fetchWithGuard", () => {
     expect(canceled).toBe(true);
     expect(release).toHaveBeenCalledTimes(1);
   });
+
+  it("rejects oversized payloads from content-length before reading the stream", async () => {
+    const stream = new ReadableStream<Uint8Array>({});
+    const getReaderSpy = vi.spyOn(stream, "getReader");
+
+    const release = vi.fn(async () => {});
+    fetchWithSsrFGuardMock.mockResolvedValueOnce({
+      response: new Response(stream, {
+        status: 200,
+        headers: {
+          "content-type": "application/octet-stream",
+          "content-length": "7",
+        },
+      }),
+      release,
+      finalUrl: "https://example.com/file.bin",
+    });
+
+    await expect(
+      fetchWithGuard({
+        url: "https://example.com/file.bin",
+        maxBytes: 6,
+        timeoutMs: 1000,
+        maxRedirects: 0,
+      }),
+    ).rejects.toThrow("Content too large");
+
+    expect(getReaderSpy).not.toHaveBeenCalled();
+    expect(release).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("base64 size guards", () => {

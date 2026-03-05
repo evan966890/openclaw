@@ -58,8 +58,17 @@ const DEFAULT_CATALOG_PATHS = [
 ];
 
 const ENV_CATALOG_PATHS = ["OPENCLAW_PLUGIN_CATALOG_PATHS", "OPENCLAW_MPM_CATALOG_PATHS"];
+const MAX_EXTERNAL_CATALOG_CACHE_ENTRIES = 32;
 
 type ManifestKey = typeof MANIFEST_KEY;
+
+type ExternalCatalogCacheEntry = {
+  mtimeMs: number;
+  size: number;
+  entries: ExternalCatalogEntry[];
+};
+
+const externalCatalogCache = new Map<string, ExternalCatalogCacheEntry>();
 
 function parseCatalogEntries(raw: unknown): ExternalCatalogEntry[] {
   if (Array.isArray(raw)) {
@@ -100,19 +109,59 @@ function resolveExternalCatalogPaths(options: CatalogOptions): string[] {
   return DEFAULT_CATALOG_PATHS;
 }
 
+function setExternalCatalogCacheEntry(pathKey: string, entry: ExternalCatalogCacheEntry): void {
+  if (externalCatalogCache.has(pathKey)) {
+    externalCatalogCache.delete(pathKey);
+  }
+  externalCatalogCache.set(pathKey, entry);
+  while (externalCatalogCache.size > MAX_EXTERNAL_CATALOG_CACHE_ENTRIES) {
+    const oldestKey = externalCatalogCache.keys().next().value;
+    if (!oldestKey) {
+      break;
+    }
+    externalCatalogCache.delete(oldestKey);
+  }
+}
+
 function loadExternalCatalogEntries(options: CatalogOptions): ExternalCatalogEntry[] {
   const paths = resolveExternalCatalogPaths(options);
   const entries: ExternalCatalogEntry[] = [];
   for (const rawPath of paths) {
     const resolved = resolveUserPath(rawPath);
-    if (!fs.existsSync(resolved)) {
+
+    let stats: fs.Stats;
+    try {
+      stats = fs.statSync(resolved);
+    } catch {
+      externalCatalogCache.delete(resolved);
       continue;
     }
+    if (!stats.isFile()) {
+      externalCatalogCache.delete(resolved);
+      continue;
+    }
+
+    const cached = externalCatalogCache.get(resolved);
+    if (cached && cached.mtimeMs === stats.mtimeMs && cached.size === stats.size) {
+      entries.push(...cached.entries);
+      continue;
+    }
+
     try {
       const payload = JSON.parse(fs.readFileSync(resolved, "utf-8")) as unknown;
-      entries.push(...parseCatalogEntries(payload));
+      const parsed = parseCatalogEntries(payload);
+      setExternalCatalogCacheEntry(resolved, {
+        mtimeMs: stats.mtimeMs,
+        size: stats.size,
+        entries: parsed,
+      });
+      entries.push(...parsed);
     } catch {
-      // Ignore invalid catalog files.
+      setExternalCatalogCacheEntry(resolved, {
+        mtimeMs: stats.mtimeMs,
+        size: stats.size,
+        entries: [],
+      });
     }
   }
   return entries;

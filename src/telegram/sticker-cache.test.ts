@@ -58,6 +58,36 @@ describe("sticker-cache", () => {
       expect(result).toEqual(sticker);
     });
 
+    it("memoizes disk reads across repeated cache lookups", () => {
+      const sticker = {
+        fileId: "memo-file",
+        fileUniqueId: "memo-unique",
+        description: "Memoized cache sticker",
+        cachedAt: "2026-01-26T12:00:00.000Z",
+      };
+
+      fs.mkdirSync(TEST_CACHE_DIR, { recursive: true });
+      fs.writeFileSync(
+        TEST_CACHE_FILE,
+        `${JSON.stringify({ version: 1, stickers: { [sticker.fileUniqueId]: sticker } }, null, 2)}\n`,
+        "utf-8",
+      );
+
+      const readSpy = vi.spyOn(fs, "readFileSync");
+      try {
+        expect(getCachedSticker("memo-unique")).toEqual(sticker);
+        expect(getCachedSticker("memo-unique")).toEqual(sticker);
+        expect(getAllCachedStickers()).toEqual([sticker]);
+
+        const cacheReads = readSpy.mock.calls.filter(
+          ([filePath]) => path.resolve(String(filePath)) === path.resolve(TEST_CACHE_FILE),
+        );
+        expect(cacheReads).toHaveLength(1);
+      } finally {
+        readSpy.mockRestore();
+      }
+    });
+
     it("returns null after cache is cleared", () => {
       const sticker = {
         fileId: "file123",

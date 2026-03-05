@@ -1,3 +1,4 @@
+import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { resolveApiKeyForProvider } from "../agents/model-auth.js";
@@ -32,21 +33,63 @@ interface StickerCache {
   stickers: Record<string, CachedSticker>;
 }
 
-function loadCache(): StickerCache {
-  const data = loadJsonFile(CACHE_FILE);
+const EMPTY_CACHE: StickerCache = { version: CACHE_VERSION, stickers: {} };
+let inMemoryCache: StickerCache | null = null;
+let cacheBackedByFile = false;
+let cacheFileMtimeMs: number | null = null;
+
+function normalizeCache(data: unknown): StickerCache {
   if (!data || typeof data !== "object") {
-    return { version: CACHE_VERSION, stickers: {} };
+    return { ...EMPTY_CACHE, stickers: {} };
   }
   const cache = data as StickerCache;
   if (cache.version !== CACHE_VERSION) {
     // Future: handle migration if needed
-    return { version: CACHE_VERSION, stickers: {} };
+    return { ...EMPTY_CACHE, stickers: {} };
   }
   return cache;
 }
 
+function readCacheFileMtimeMs(): number | null {
+  try {
+    return fsSync.statSync(CACHE_FILE).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
+function loadCache(): StickerCache {
+  const currentMtimeMs = readCacheFileMtimeMs();
+
+  if (inMemoryCache) {
+    if (currentMtimeMs === null) {
+      if (cacheBackedByFile) {
+        inMemoryCache = { ...EMPTY_CACHE, stickers: {} };
+      }
+      cacheBackedByFile = false;
+      cacheFileMtimeMs = null;
+      return inMemoryCache;
+    }
+
+    if (!cacheBackedByFile || cacheFileMtimeMs === null || currentMtimeMs !== cacheFileMtimeMs) {
+      inMemoryCache = normalizeCache(loadJsonFile(CACHE_FILE));
+      cacheBackedByFile = true;
+      cacheFileMtimeMs = currentMtimeMs;
+    }
+    return inMemoryCache;
+  }
+
+  inMemoryCache = normalizeCache(loadJsonFile(CACHE_FILE));
+  cacheBackedByFile = currentMtimeMs !== null;
+  cacheFileMtimeMs = currentMtimeMs;
+  return inMemoryCache;
+}
+
 function saveCache(cache: StickerCache): void {
   saveJsonFile(CACHE_FILE, cache);
+  inMemoryCache = cache;
+  cacheFileMtimeMs = readCacheFileMtimeMs();
+  cacheBackedByFile = cacheFileMtimeMs !== null;
 }
 
 /**

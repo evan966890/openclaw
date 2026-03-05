@@ -1,6 +1,7 @@
 import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../routing/account-id.js";
 
 const DISCORD_DIRECTORY_CACHE_MAX_ENTRIES = 4000;
+const DISCORD_DIRECTORY_CACHE_MAX_ACCOUNTS = 64;
 const DISCORD_DISCRIMINATOR_SUFFIX = /#\d{4}$/;
 
 const DIRECTORY_HANDLE_CACHE = new Map<string, Map<string, string>>();
@@ -32,14 +33,31 @@ function normalizeHandleKey(raw: string): string | null {
   return handle.toLowerCase();
 }
 
+function touchAccountCache(cacheKey: string, cache: Map<string, string>): void {
+  DIRECTORY_HANDLE_CACHE.delete(cacheKey);
+  DIRECTORY_HANDLE_CACHE.set(cacheKey, cache);
+}
+
+function enforceAccountCacheBound(): void {
+  if (DIRECTORY_HANDLE_CACHE.size <= DISCORD_DIRECTORY_CACHE_MAX_ACCOUNTS) {
+    return;
+  }
+  const oldest = DIRECTORY_HANDLE_CACHE.keys().next();
+  if (!oldest.done) {
+    DIRECTORY_HANDLE_CACHE.delete(oldest.value);
+  }
+}
+
 function ensureAccountCache(accountId?: string | null): Map<string, string> {
   const cacheKey = normalizeAccountCacheKey(accountId);
   const existing = DIRECTORY_HANDLE_CACHE.get(cacheKey);
   if (existing) {
+    touchAccountCache(cacheKey, existing);
     return existing;
   }
   const created = new Map<string, string>();
   DIRECTORY_HANDLE_CACHE.set(cacheKey, created);
+  enforceAccountCacheBound();
   return created;
 }
 

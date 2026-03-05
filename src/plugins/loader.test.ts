@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterAll, afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { withEnv } from "../test-utils/env.js";
 import { getGlobalHookRunner, resetGlobalHookRunner } from "./hook-runner-global.js";
 import { createHookRunner } from "./hooks.js";
@@ -229,6 +229,7 @@ function createPluginSdkAliasFixture(params?: {
 }
 
 afterEach(() => {
+  __testing.resetPluginSdkAliasResolutionCache();
   if (prevBundledDir === undefined) {
     delete process.env.OPENCLAW_BUNDLED_PLUGINS_DIR;
   } else {
@@ -1273,5 +1274,35 @@ describe("loadOpenClawPlugins", () => {
       }),
     );
     expect(resolved).toBe(srcFile);
+  });
+
+  it("memoizes plugin-sdk alias resolution to avoid repeated fs lookups", () => {
+    const { root, srcFile } = createPluginSdkAliasFixture({
+      srcFile: "memo.ts",
+      distFile: "memo.js",
+    });
+    const modulePath = path.join(root, "src", "plugins", "loader.ts");
+    const existsSyncSpy = vi.spyOn(fs, "existsSync");
+
+    const first = __testing.resolvePluginSdkAliasFile({
+      srcFile: "memo.ts",
+      distFile: "memo.js",
+      modulePath,
+    });
+    const firstCallCount = existsSyncSpy.mock.calls.length;
+
+    const second = __testing.resolvePluginSdkAliasFile({
+      srcFile: "memo.ts",
+      distFile: "memo.js",
+      modulePath,
+    });
+    const secondCallCount = existsSyncSpy.mock.calls.length;
+
+    existsSyncSpy.mockRestore();
+
+    expect(first).toBe(srcFile);
+    expect(second).toBe(srcFile);
+    expect(firstCallCount).toBeGreaterThan(0);
+    expect(secondCallCount).toBe(firstCallCount);
   });
 });

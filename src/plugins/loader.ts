@@ -43,6 +43,7 @@ export type PluginLoadOptions = {
 };
 
 const registryCache = new Map<string, PluginRegistry>();
+const pluginSdkAliasResolutionCache = new Map<string, string | null>();
 
 const defaultLogger = () => createSubsystemLogger("plugins");
 
@@ -51,8 +52,21 @@ const resolvePluginSdkAliasFile = (params: {
   distFile: string;
   modulePath?: string;
 }): string | null => {
+  const modulePath = params.modulePath ?? fileURLToPath(import.meta.url);
+  const cacheKey = [
+    params.srcFile,
+    params.distFile,
+    modulePath,
+    process.env.NODE_ENV ?? "",
+    process.env.VITEST ? "1" : "0",
+  ].join("::");
+  const cached = pluginSdkAliasResolutionCache.get(cacheKey);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  let resolved: string | null = null;
   try {
-    const modulePath = params.modulePath ?? fileURLToPath(import.meta.url);
     const isProduction = process.env.NODE_ENV === "production";
     const isTest = process.env.VITEST || process.env.NODE_ENV === "test";
     const normalizedModulePath = modulePath.replace(/\\/g, "/");
@@ -70,8 +84,12 @@ const resolvePluginSdkAliasFile = (params: {
           : [srcCandidate, distCandidate];
       for (const candidate of orderedCandidates) {
         if (fs.existsSync(candidate)) {
-          return candidate;
+          resolved = candidate;
+          break;
         }
+      }
+      if (resolved) {
+        break;
       }
       const parent = path.dirname(cursor);
       if (parent === cursor) {
@@ -82,7 +100,9 @@ const resolvePluginSdkAliasFile = (params: {
   } catch {
     // ignore
   }
-  return null;
+
+  pluginSdkAliasResolutionCache.set(cacheKey, resolved);
+  return resolved;
 };
 
 const resolvePluginSdkAlias = (): string | null =>
@@ -194,6 +214,7 @@ const resolvePluginSdkScopedAliasMap = (): Record<string, string> => {
 
 export const __testing = {
   resolvePluginSdkAliasFile,
+  resetPluginSdkAliasResolutionCache: () => pluginSdkAliasResolutionCache.clear(),
 };
 
 function buildCacheKey(params: {

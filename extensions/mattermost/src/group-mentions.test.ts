@@ -43,4 +43,26 @@ describe("resolveMattermostGroupRequireMention", () => {
     });
     expect(requireMention).toBe(false);
   });
+
+  it("does not resolve account secrets when runtime override is explicit", () => {
+    const cfg: OpenClawConfig = {
+      channels: {
+        mattermost: {
+          botToken: {
+            source: "env",
+            provider: "MISSING_PROVIDER",
+            id: "MISSING_ID",
+          },
+        },
+      },
+    };
+
+    const requireMention = resolveMattermostGroupRequireMention({
+      cfg,
+      accountId: "default",
+      requireMentionOverride: false,
+    });
+
+    expect(requireMention).toBe(false);
+  });
 });

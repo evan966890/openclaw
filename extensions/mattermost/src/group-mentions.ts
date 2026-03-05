@@ -5,14 +5,13 @@ import { resolveMattermostAccount } from "./mattermost/accounts.js";
 export function resolveMattermostGroupRequireMention(
   params: ChannelGroupContext & { requireMentionOverride?: boolean },
 ): boolean | undefined {
-  const account = resolveMattermostAccount({
-    cfg: params.cfg,
-    accountId: params.accountId,
-  });
   const requireMentionOverride =
     typeof params.requireMentionOverride === "boolean"
       ? params.requireMentionOverride
-      : account.requireMention;
+      : resolveMattermostAccount({
+          cfg: params.cfg,
+          accountId: params.accountId,
+        }).requireMention;
   return resolveChannelGroupRequireMention({
     cfg: params.cfg,
     channel: "mattermost",

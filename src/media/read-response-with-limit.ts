@@ -1,3 +1,5 @@
+import { logVerbose } from "../globals.js";
+
 export async function readResponseWithLimit(
   res: Response,
   maxBytes: number,
@@ -33,7 +35,9 @@ export async function readResponseWithLimit(
         if (total > maxBytes) {
           try {
             await reader.cancel();
-          } catch {}
+          } catch (err) {
+            logVerbose(`media: reader.cancel failed after overflow: ${String(err)}`);
+          }
           throw onOverflow({ size: total, maxBytes, res });
         }
         chunks.push(value);
@@ -42,7 +46,9 @@ export async function readResponseWithLimit(
   } finally {
     try {
       reader.releaseLock();
-    } catch {}
+    } catch (err) {
+      logVerbose(`media: reader.releaseLock failed: ${String(err)}`);
+    }
   }
 
   return Buffer.concat(

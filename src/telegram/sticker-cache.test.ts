@@ -115,6 +115,54 @@ describe("sticker-cache", () => {
     });
   });
 
+  describe("cache bounds", () => {
+    let originalLimit: string | undefined;
+
+    beforeEach(() => {
+      originalLimit = process.env.OPENCLAW_TELEGRAM_STICKER_CACHE_MAX;
+    });
+
+    afterEach(() => {
+      if (originalLimit === undefined) {
+        delete process.env.OPENCLAW_TELEGRAM_STICKER_CACHE_MAX;
+      } else {
+        process.env.OPENCLAW_TELEGRAM_STICKER_CACHE_MAX = originalLimit;
+      }
+    });
+
+    it("evicts oldest stickers when max entries is exceeded", () => {
+      process.env.OPENCLAW_TELEGRAM_STICKER_CACHE_MAX = "2";
+
+      cacheSticker({
+        fileId: "first",
+        fileUniqueId: "first-unique",
+        description: "First sticker",
+        cachedAt: "2026-01-20T10:00:00.000Z",
+      });
+      cacheSticker({
+        fileId: "second",
+        fileUniqueId: "second-unique",
+        description: "Second sticker",
+        cachedAt: "2026-01-21T10:00:00.000Z",
+      });
+      cacheSticker({
+        fileId: "third",
+        fileUniqueId: "third-unique",
+        description: "Third sticker",
+        cachedAt: "2026-01-22T10:00:00.000Z",
+      });
+
+      expect(getCachedSticker("first-unique")).toBeNull();
+      expect(getCachedSticker("second-unique")?.fileId).toBe("second");
+      expect(getCachedSticker("third-unique")?.fileId).toBe("third");
+
+      const stats = getCacheStats();
+      expect(stats.count).toBe(2);
+      expect(stats.oldestAt).toBe("2026-01-21T10:00:00.000Z");
+      expect(stats.newestAt).toBe("2026-01-22T10:00:00.000Z");
+    });
+  });
+
   describe("searchStickers", () => {
     beforeEach(() => {
       // Seed cache with test stickers

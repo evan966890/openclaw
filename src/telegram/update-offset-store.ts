@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { resolveStateDir } from "../config/paths.js";
+import { logVerbose } from "../globals.js";
 import { writeJsonAtomic } from "../infra/json-files.js";
 
 const STORE_VERSION = 2;
@@ -80,19 +81,28 @@ export async function readTelegramUpdateOffset(params: {
   try {
     const raw = await fs.readFile(filePath, "utf-8");
     const parsed = safeParseState(raw);
+    if (!parsed) {
+      logVerbose(
+        `telegram update offset parse failed (${normalizeAccountId(params.accountId)}): invalid state`,
+      );
+      return null;
+    }
     const expectedBotId = extractBotIdFromToken(params.botToken);
-    if (expectedBotId && parsed?.botId && parsed.botId !== expectedBotId) {
+    if (expectedBotId && parsed.botId && parsed.botId !== expectedBotId) {
       return null;
     }
-    if (expectedBotId && parsed?.botId === null) {
+    if (expectedBotId && parsed.botId === null) {
       return null;
     }
-    return parsed?.lastUpdateId ?? null;
+    return parsed.lastUpdateId;
   } catch (err) {
     const code = (err as { code?: string }).code;
     if (code === "ENOENT") {
       return null;
     }
+    logVerbose(
+      `telegram update offset read failed (${normalizeAccountId(params.accountId)}): ${String(err)}`,
+    );
     return null;
   }
 }

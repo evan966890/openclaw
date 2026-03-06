@@ -1,7 +1,13 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { withStateDirEnv } from "../test-helpers/state-dir-env.js";
+const logVerboseMock = vi.hoisted(() => vi.fn());
+
+vi.mock("../globals.js", () => ({
+  logVerbose: logVerboseMock,
+}));
+
 import {
   deleteTelegramUpdateOffset,
   readTelegramUpdateOffset,
@@ -9,6 +15,10 @@ import {
 } from "./update-offset-store.js";
 
 describe("deleteTelegramUpdateOffset", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("removes the offset file so a new bot starts fresh", async () => {
     await withStateDirEnv("openclaw-tg-offset-", async () => {
       await writeTelegramUpdateOffset({ accountId: "default", updateId: 432_000_000 });
@@ -76,6 +86,30 @@ describe("deleteTelegramUpdateOffset", () => {
           botToken: "333333:token-c",
         }),
       ).toBeNull();
+    });
+  });
+  it("logs when stored state JSON is malformed", async () => {
+    await withStateDirEnv("openclaw-tg-offset-", async ({ stateDir }) => {
+      const offsetPath = path.join(stateDir, "telegram", "update-offset-default.json");
+      await fs.mkdir(path.dirname(offsetPath), { recursive: true });
+      await fs.writeFile(offsetPath, "{not-json}\n", "utf-8");
+
+      await expect(readTelegramUpdateOffset({ accountId: "default" })).resolves.toBeNull();
+      expect(logVerboseMock).toHaveBeenCalledWith(
+        expect.stringContaining("telegram update offset parse failed (default): invalid state"),
+      );
+    });
+  });
+
+  it("logs non-ENOENT read errors", async () => {
+    await withStateDirEnv("openclaw-tg-offset-", async ({ stateDir }) => {
+      const offsetPath = path.join(stateDir, "telegram", "update-offset-default.json");
+      await fs.mkdir(offsetPath, { recursive: true });
+
+      await expect(readTelegramUpdateOffset({ accountId: "default" })).resolves.toBeNull();
+      expect(logVerboseMock).toHaveBeenCalledWith(
+        expect.stringContaining("telegram update offset read failed (default):"),
+      );
     });
   });
 });

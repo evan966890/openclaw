@@ -62,12 +62,31 @@ describe("resolveTelegramToken", () => {
     vi.stubEnv("TELEGRAM_BOT_TOKEN", "");
     const dir = withTempDir();
     const tokenFile = path.join(dir, "missing-token.txt");
+    const logMissingFile = vi.fn();
     const cfg = {
       channels: { telegram: { tokenFile, botToken: "cfg-token" } },
     } as OpenClawConfig;
-    const res = resolveTelegramToken(cfg);
+    const res = resolveTelegramToken(cfg, { logMissingFile });
     expect(res.token).toBe("");
     expect(res.source).toBe("none");
+    expect(logMissingFile).toHaveBeenCalledWith(
+      `channels.telegram.tokenFile not found: ${tokenFile}`,
+    );
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("logs tokenFile read failures when file path is unreadable", () => {
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "");
+    const dir = withTempDir();
+    const logMissingFile = vi.fn();
+    const cfg = {
+      channels: { telegram: { tokenFile: dir, botToken: "cfg-token" } },
+    } as OpenClawConfig;
+    const res = resolveTelegramToken(cfg, { logMissingFile });
+    expect(res.token).toBe("");
+    expect(res.source).toBe("none");
+    expect(logMissingFile).toHaveBeenCalledTimes(1);
+    expect(logMissingFile.mock.calls[0]?.[0]).toContain("channels.telegram.tokenFile read failed:");
     fs.rmSync(dir, { recursive: true, force: true });
   });
 

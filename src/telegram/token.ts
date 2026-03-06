@@ -17,6 +17,30 @@ type ResolveTelegramTokenOpts = {
   logMissingFile?: (message: string) => void;
 };
 
+type ReadTelegramTokenFileResult = { ok: true; token: string } | { ok: false };
+
+function readTelegramTokenFile(params: {
+  tokenFile: string;
+  logMissingFile?: (message: string) => void;
+  missingMessage: string;
+  readFailedMessagePrefix: string;
+}): ReadTelegramTokenFileResult {
+  try {
+    return { ok: true, token: fs.readFileSync(params.tokenFile, "utf-8").trim() };
+  } catch (err) {
+    const code =
+      typeof err === "object" && err !== null && "code" in err
+        ? (err as { code?: unknown }).code
+        : undefined;
+    if (code === "ENOENT") {
+      params.logMissingFile?.(params.missingMessage);
+    } else {
+      params.logMissingFile?.(`${params.readFailedMessagePrefix}: ${String(err)}`);
+    }
+    return { ok: false };
+  }
+}
+
 export function resolveTelegramToken(
   cfg?: OpenClawConfig,
   opts: ResolveTelegramTokenOpts = {},
@@ -46,22 +70,17 @@ export function resolveTelegramToken(
   );
   const accountTokenFile = accountCfg?.tokenFile?.trim();
   if (accountTokenFile) {
-    if (!fs.existsSync(accountTokenFile)) {
-      opts.logMissingFile?.(
-        `channels.telegram.accounts.${accountId}.tokenFile not found: ${accountTokenFile}`,
-      );
+    const tokenResult = readTelegramTokenFile({
+      tokenFile: accountTokenFile,
+      logMissingFile: opts.logMissingFile,
+      missingMessage: `channels.telegram.accounts.${accountId}.tokenFile not found: ${accountTokenFile}`,
+      readFailedMessagePrefix: `channels.telegram.accounts.${accountId}.tokenFile read failed`,
+    });
+    if (!tokenResult.ok) {
       return { token: "", source: "none" };
     }
-    try {
-      const token = fs.readFileSync(accountTokenFile, "utf-8").trim();
-      if (token) {
-        return { token, source: "tokenFile" };
-      }
-    } catch (err) {
-      opts.logMissingFile?.(
-        `channels.telegram.accounts.${accountId}.tokenFile read failed: ${String(err)}`,
-      );
-      return { token: "", source: "none" };
+    if (tokenResult.token) {
+      return { token: tokenResult.token, source: "tokenFile" };
     }
     return { token: "", source: "none" };
   }
@@ -77,18 +96,17 @@ export function resolveTelegramToken(
   const allowEnv = accountId === DEFAULT_ACCOUNT_ID;
   const tokenFile = telegramCfg?.tokenFile?.trim();
   if (tokenFile) {
-    if (!fs.existsSync(tokenFile)) {
-      opts.logMissingFile?.(`channels.telegram.tokenFile not found: ${tokenFile}`);
+    const tokenResult = readTelegramTokenFile({
+      tokenFile,
+      logMissingFile: opts.logMissingFile,
+      missingMessage: `channels.telegram.tokenFile not found: ${tokenFile}`,
+      readFailedMessagePrefix: "channels.telegram.tokenFile read failed",
+    });
+    if (!tokenResult.ok) {
       return { token: "", source: "none" };
     }
-    try {
-      const token = fs.readFileSync(tokenFile, "utf-8").trim();
-      if (token) {
-        return { token, source: "tokenFile" };
-      }
-    } catch (err) {
-      opts.logMissingFile?.(`channels.telegram.tokenFile read failed: ${String(err)}`);
-      return { token: "", source: "none" };
+    if (tokenResult.token) {
+      return { token: tokenResult.token, source: "tokenFile" };
     }
   }
 

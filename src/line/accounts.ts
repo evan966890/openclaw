@@ -15,13 +15,51 @@ import type {
 
 export { DEFAULT_ACCOUNT_ID } from "../routing/account-id.js";
 
+type CredentialFileCacheEntry = {
+  mtimeMs: number;
+  size: number;
+  value: string;
+};
+
+const MAX_CREDENTIAL_FILE_CACHE_ENTRIES = 32;
+const CREDENTIAL_FILE_CACHE = new Map<string, CredentialFileCacheEntry>();
+
+function refreshCredentialFileCacheEntry(filePath: string, entry: CredentialFileCacheEntry): void {
+  CREDENTIAL_FILE_CACHE.delete(filePath);
+  CREDENTIAL_FILE_CACHE.set(filePath, entry);
+}
+
+function setCredentialFileCacheEntry(filePath: string, entry: CredentialFileCacheEntry): void {
+  refreshCredentialFileCacheEntry(filePath, entry);
+  while (CREDENTIAL_FILE_CACHE.size > MAX_CREDENTIAL_FILE_CACHE_ENTRIES) {
+    const oldest = CREDENTIAL_FILE_CACHE.keys().next().value;
+    if (!oldest) {
+      break;
+    }
+    CREDENTIAL_FILE_CACHE.delete(oldest);
+  }
+}
+
 function readFileIfExists(filePath: string | undefined): string | undefined {
   if (!filePath) {
     return undefined;
   }
   try {
-    return fs.readFileSync(filePath, "utf-8").trim();
+    const stat = fs.statSync(filePath);
+    const cached = CREDENTIAL_FILE_CACHE.get(filePath);
+    if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+      refreshCredentialFileCacheEntry(filePath, cached);
+      return cached.value;
+    }
+    const value = fs.readFileSync(filePath, "utf-8").trim();
+    setCredentialFileCacheEntry(filePath, {
+      mtimeMs: stat.mtimeMs,
+      size: stat.size,
+      value,
+    });
+    return value;
   } catch {
+    CREDENTIAL_FILE_CACHE.delete(filePath);
     return undefined;
   }
 }

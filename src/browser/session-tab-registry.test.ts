@@ -81,6 +81,36 @@ describe("session tab registry", () => {
     });
   });
 
+  it("evicts oldest tracked tabs when session limit is exceeded", async () => {
+    for (let i = 0; i < 101; i += 1) {
+      trackSessionBrowserTab({
+        sessionKey: "agent:main:main",
+        targetId: `tab-${i}`,
+      });
+    }
+
+    expect(__countTrackedSessionBrowserTabsForTests("agent:main:main")).toBe(100);
+
+    const closeTab = vi.fn(async () => {});
+    const closed = await closeTrackedBrowserTabsForSessions({
+      sessionKeys: ["agent:main:main"],
+      closeTab,
+    });
+
+    expect(closed).toBe(100);
+    expect(closeTab).toHaveBeenCalledTimes(100);
+    expect(closeTab).not.toHaveBeenCalledWith({
+      targetId: "tab-0",
+      baseUrl: undefined,
+      profile: undefined,
+    });
+    expect(closeTab).toHaveBeenCalledWith({
+      targetId: "tab-100",
+      baseUrl: undefined,
+      profile: undefined,
+    });
+  });
+
   it("deduplicates tabs and ignores expected close errors", async () => {
     trackSessionBrowserTab({
       sessionKey: "agent:main:main",

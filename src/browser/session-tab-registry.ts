@@ -9,6 +9,7 @@ export type TrackedSessionBrowserTab = {
 };
 
 const trackedTabsBySession = new Map<string, Map<string, TrackedSessionBrowserTab>>();
+const MAX_TRACKED_TABS_PER_SESSION = 100;
 
 function normalizeSessionKey(raw: string): string {
   return raw.trim().toLowerCase();
@@ -76,7 +77,18 @@ export function trackSessionBrowserTab(params: {
     trackedForSession = new Map();
     trackedTabsBySession.set(sessionKey, trackedForSession);
   }
+  if (trackedForSession.has(trackedId)) {
+    trackedForSession.delete(trackedId);
+  }
   trackedForSession.set(trackedId, tracked);
+
+  while (trackedForSession.size > MAX_TRACKED_TABS_PER_SESSION) {
+    const oldestTrackedId = trackedForSession.keys().next().value;
+    if (!oldestTrackedId) {
+      break;
+    }
+    trackedForSession.delete(oldestTrackedId);
+  }
 }
 
 export function untrackSessionBrowserTab(params: {

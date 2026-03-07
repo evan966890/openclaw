@@ -242,6 +242,7 @@ type TailscaleWhoisCacheEntry = {
   expiresAt: number;
 };
 
+const WHOIS_CACHE_LIMIT = 256;
 const whoisCache = new Map<string, TailscaleWhoisCacheEntry>();
 
 function extractExecErrorText(err: unknown) {
@@ -463,6 +464,9 @@ function readCachedWhois(ip: string, now: number): TailscaleWhoisIdentity | null
 }
 
 function writeCachedWhois(ip: string, value: TailscaleWhoisIdentity | null, ttlMs: number) {
+  if (whoisCache.size >= WHOIS_CACHE_LIMIT) {
+    whoisCache.clear();
+  }
   whoisCache.set(ip, { value, expiresAt: Date.now() + ttlMs });
 }
 

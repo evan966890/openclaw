@@ -214,6 +214,15 @@ const applyCostTotal = (totals: CostUsageTotals, costTotal: number | undefined) 
   totals.totalCost += costTotal;
 };
 
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.promises.access(filePath, fs.constants.R_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function* readJsonlRecords(filePath: string): AsyncGenerator<Record<string, unknown>> {
   const fileStream = fs.createReadStream(filePath, { encoding: "utf-8" });
   const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
@@ -475,7 +484,7 @@ export async function loadSessionCostSummary(params: {
           agentId: params.agentId,
         })
       : undefined);
-  if (!sessionFile || !fs.existsSync(sessionFile)) {
+  if (!sessionFile || !(await fileExists(sessionFile))) {
     return null;
   }
 
@@ -752,7 +761,7 @@ export async function loadSessionUsageTimeSeries(params: {
           agentId: params.agentId,
         })
       : undefined);
-  if (!sessionFile || !fs.existsSync(sessionFile)) {
+  if (!sessionFile || !(await fileExists(sessionFile))) {
     return null;
   }
 
@@ -861,7 +870,7 @@ export async function loadSessionLogs(params: {
           agentId: params.agentId,
         })
       : undefined);
-  if (!sessionFile || !fs.existsSync(sessionFile)) {
+  if (!sessionFile || !(await fileExists(sessionFile))) {
     return null;
   }
 

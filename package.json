@@ -413,6 +413,18 @@
   "packageManager": "pnpm@10.23.0",
   "pnpm": {
     "minimumReleaseAge": 2880,
+    "packageExtensions": {
+      "@mariozechner/pi-coding-agent@0.55.3": {
+        "dependencies": {
+          "strip-ansi": "^7.2.0"
+        }
+      },
+      "@whiskeysockets/baileys@7.0.0-rc.9": {
+        "dependencies": {
+          "long": "^5.3.2"
+        }
+      }
+    },
     "overrides": {
       "hono": "4.12.5",
       "@hono/node-server": "1.19.10",

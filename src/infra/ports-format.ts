@@ -1,19 +1,12 @@
 import { formatCliCommand } from "../cli/command-format.js";
 import type { PortListener, PortListenerKind, PortUsage } from "./ports-types.js";
 
-export function classifyPortListener(listener: PortListener, port: number): PortListenerKind {
+export function classifyPortListener(listener: PortListener, _port: number): PortListenerKind {
   const raw = `${listener.commandLine ?? ""} ${listener.command ?? ""}`.trim().toLowerCase();
   if (raw.includes("openclaw")) {
     return "gateway";
   }
   if (raw.includes("ssh")) {
-    const portToken = String(port);
-    const tunnelPattern = new RegExp(
-      `-(l|r)\\s*${portToken}\\b|-(l|r)${portToken}\\b|:${portToken}\\b`,
-    );
-    if (!raw || tunnelPattern.test(raw)) {
-      return "ssh";
-    }
     return "ssh";
   }
   return "unknown";

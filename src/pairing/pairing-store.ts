@@ -7,6 +7,7 @@ import type { ChannelId, ChannelPairingAdapter } from "../channels/plugins/types
 import { resolveOAuthDir, resolveStateDir } from "../config/paths.js";
 import { withFileLock as withPathLock } from "../infra/file-lock.js";
 import { resolveRequiredHomeDir } from "../infra/home-dir.js";
+import { pruneMapToMaxSize } from "../infra/map-size.js";
 import { readJsonFileWithFallback, writeJsonFileAtomically } from "../plugin-sdk/json-store.js";
 import { DEFAULT_ACCOUNT_ID } from "../routing/session-key.js";
 
@@ -24,6 +25,7 @@ const PAIRING_STORE_LOCK_OPTIONS = {
   },
   stale: 30_000,
 } as const;
+const ALLOW_FROM_READ_CACHE_LIMIT = 256;
 type AllowFromReadCacheEntry = {
   exists: boolean;
   mtimeMs: number | null;
@@ -297,6 +299,9 @@ function cloneAllowFromCacheEntry(entry: AllowFromReadCacheEntry): AllowFromRead
 }
 
 function setAllowFromReadCache(filePath: string, entry: AllowFromReadCacheEntry): void {
+  if (allowFromReadCache.size >= ALLOW_FROM_READ_CACHE_LIMIT) {
+    pruneMapToMaxSize(allowFromReadCache, ALLOW_FROM_READ_CACHE_LIMIT - 1);
+  }
   allowFromReadCache.set(filePath, cloneAllowFromCacheEntry(entry));
 }
 

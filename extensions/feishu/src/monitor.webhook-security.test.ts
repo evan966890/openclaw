@@ -2,10 +2,6 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { ClawdbotConfig } from "openclaw/plugin-sdk/feishu";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  createFeishuClientMockModule,
-  createFeishuRuntimeMockModule,
-} from "./monitor.test-mocks.js";
 
 const probeFeishuMock = vi.hoisted(() => vi.fn());
 
@@ -13,8 +9,12 @@ vi.mock("./probe.js", () => ({
   probeFeishu: probeFeishuMock,
 }));
 
-vi.mock("./client.js", () => createFeishuClientMockModule());
-vi.mock("./runtime.js", () => createFeishuRuntimeMockModule());
+vi.mock("./client.js", async () =>
+  (await import("./monitor.test-mocks.js")).createFeishuClientMockModule(),
+);
+vi.mock("./runtime.js", async () =>
+  (await import("./monitor.test-mocks.js")).createFeishuRuntimeMockModule(),
+);
 
 vi.mock("@larksuiteoapi/node-sdk", () => ({
   adaptDefault: vi.fn(

@@ -242,6 +242,40 @@ describe("discoverKilocodeModels (fetch path)", () => {
     }
   });
 
+  it("skips models with missing pricing data", async () => {
+    const origNodeEnv = process.env.NODE_ENV;
+    const origVitest = process.env.VITEST;
+    delete process.env.NODE_ENV;
+    delete process.env.VITEST;
+
+    const noPricingModel = makeGatewayModel({
+      id: "some/no-pricing-model",
+      pricing: undefined,
+    });
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          data: [noPricingModel, makeAutoModel()],
+        }),
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    try {
+      const models = await discoverKilocodeModels();
+      // The model without pricing should be skipped; kilo/auto and static catalog remain
+      expect(models.some((m) => m.id === "some/no-pricing-model")).toBe(false);
+      expect(models.some((m) => m.id === "kilo/auto")).toBe(true);
+    } finally {
+      process.env.NODE_ENV = origNodeEnv;
+      if (origVitest !== undefined) {
+        process.env.VITEST = origVitest;
+      }
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("keeps a later valid duplicate when an earlier entry is malformed", async () => {
     const origNodeEnv = process.env.NODE_ENV;
     const origVitest = process.env.VITEST;

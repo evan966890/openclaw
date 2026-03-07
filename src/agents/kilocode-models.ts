@@ -40,7 +40,7 @@ interface GatewayModelEntry {
   top_provider?: {
     max_completion_tokens?: number | null;
   };
-  pricing: GatewayModelPricing;
+  pricing?: GatewayModelPricing;
   supported_parameters?: string[];
 }
 
@@ -92,6 +92,9 @@ function parseReasoning(entry: GatewayModelEntry): boolean {
 }
 
 function toModelDefinition(entry: GatewayModelEntry): ModelDefinitionConfig {
+  if (!entry.pricing) {
+    throw new Error(`Missing pricing data for model "${entry.id}"`);
+  }
   return {
     id: entry.id,
     name: entry.name || entry.id,
@@ -182,7 +185,8 @@ export async function discoverKilocodeModels(): Promise<ModelDefinitionConfig[]>
       }
     }
 
-    return models.length > 0 ? models : buildStaticCatalog();
+    log.debug(`Discovered ${models.length} models from gateway API`);
+    return models;
   } catch (error) {
     log.warn(`Discovery failed: ${String(error)}, using static catalog`);
     return buildStaticCatalog();
